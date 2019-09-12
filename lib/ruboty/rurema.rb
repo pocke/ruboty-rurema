@@ -5,6 +5,8 @@ require 'uri'
 require 'json'
 require 'open-uri'
 require 'cgi'
+require 'optparse'
+require 'shellwords'
 
 module Ruboty
   module Handlers
@@ -21,6 +23,7 @@ module Ruboty
 
       def rurema(message)
         query = message.match_data['query']
+        query, params = parse_query(query)
         url = build_url(query)
         if url && exist_resource?(url)
           message.reply url
@@ -34,10 +37,23 @@ module Ruboty
           return
         end
 
-        url = resp.dig(:entries, 0, :documents, -1, :url)
-        # BUG: rurema searcher returns URL with 'https://docs.ruby-lang.org/ja/search/', so we need removing it.
-        url.sub!('docs.ruby-lang.org/ja/search/http://', '')
-        message.reply url
+        resp = params[:n].to_i.times.map do |idx|
+          url = resp.dig(:entries, idx, :documents, -1, :url)
+          next unless url
+          # BUG: rurema searcher returns URL with 'https://docs.ruby-lang.org/ja/search/', so we need removing it.
+          url.sub('docs.ruby-lang.org/ja/search/http://', '')
+        end.compact
+        message.reply resp.join("\n")
+      end
+
+      private def parse_query(query)
+        args = Shellwords.split(query)
+        opt = OptionParser.new
+        params = {n: 1}
+        opt.on("-n COUNT")
+        opt.parse!(args, into: params)
+
+        return args.join(' '), params
       end
 
       private def build_url(query)
